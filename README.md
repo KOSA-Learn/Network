@@ -98,7 +98,6 @@
 ### 임용진
 <details>
   <summary> 네트워크 - 라우팅 프로토콜 vs 라우티드 프로토콜 </summary>
----
 
 ## 라우팅 프로토콜 (Routing Protocol)
 
