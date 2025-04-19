@@ -78,31 +78,28 @@ git clone https://github.com/chobits/ngx_http_proxy_connect_module.git # ngx_htt
 ```
 ```bash
 server {
-    listen 3128; # 프록시 서버에 접근할 때 사용할 포트
-    server_name localhost;
+    listen 3128;  # 포트 3128에서 클라이언트 요청을 수신
+    server_name localhost;  # 서버 이름을 'localhost'로 설정
 
-    # dns resolver used by forward proxying
-    resolver 8.8.8.8; # 사내 DNS를 통해서 질의를 해야 한다면 사내 DNS 사용 필요
+    # 포워드 프록시에서 DNS를 처리하는 DNS 리졸버 설정
+    resolver 8.8.8.8;  # 포워드 프록시 요청에 대해 DNS 질의를 처리할 DNS 서버를 구글의 8.8.8.8로 설정
 
-    access_log /data/logs/nginx/message.access.log;
-    error_log /data/logs/nginx/message.error.log;
+    # 포워드 프록시 요청을 위한 CONNECT 메서드 처리
+    proxy_connect;  # CONNECT HTTP 메서드를 사용하여 프록시 연결을 허용 (주로 HTTPS 연결에 사용)
+    proxy_connect_allow         443 563;  # CONNECT 메서드가 연결할 수 있는 포트를 443(HTTPS), 563(SSL)으로 지정
+    proxy_connect_connect_timeout 120s;  # 프록시 서버와의 연결 타임아웃을 120초로 설정
+    proxy_connect_read_timeout 120s;  # 프록시 서버로부터 응답을 읽는 타임아웃을 120초로 설정
+    proxy_connect_send_timeout 120s;  # 프록시 서버에 요청을 보내는 타임아웃을 120초로 설정
 
-    # forward proxy for CONNECT request
-    proxy_connect; # CONNECT HTTP method 허용
-    proxy_connect_allow         443 563; # CONNECT method가 연결할 수 있는 포트 리스트(default: 443 563)
-    proxy_connect_connect_timeout 120s; # 프록시 서버와의 connection 유지시간
-    proxy_connect_read_timeout 120s; # 프록시 서버로부터 응답을 가져올 때의 timeout 시간
-    proxy_connect_send_timeout 120s; # 프록시 서버에 요청을 보낼 때의 timeout 시간
+    location / {  # 기본 위치 설정, 모든 경로에 대해 프록시 설정을 적용
+        proxy_set_header Host $host;  # 클라이언트의 호스트 헤더를 프록시 서버에 전달
+        proxy_set_header X-Real-IP $remote_addr;  # 클라이언트의 실제 IP 주소를 X-Real-IP 헤더로 전달
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  # X-Forwarded-For 헤더에 클라이언트 IP를 추가
+        proxy_set_header X-Forwarded-Proto $scheme;  # 클라이언트 요청의 프로토콜(HTTP/HTTPS)을 X-Forwarded-Proto 헤더로 전달
 
-    location / {
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Enable passing the body and query string
-        proxy_method $request_method;
-        proxy_set_body $request_body;
+        # 본문과 쿼리 문자열 전달을 활성화
+        proxy_method $request_method;  # 클라이언트의 HTTP 요청 메서드를 그대로 사용하도록 설정
+        proxy_set_body $request_body;  # 요청 본문을 프록시 서버에 전달
     }
 }
 ```
@@ -136,236 +133,95 @@ tail -f /usr/local/nginx/logs/access.log
 
   **설정 (예: NGINX로 설정):**
 ```bash
-brew install nginx
-sudo mkdir -p /opt/homebrew/etc/nginx/ssl
+brew install nginx # Homebrew로 설치한 Nginx의 모든 파일은 /opt/homebrew 경로 아래에 위치한 파일들을 수정해야 한다.
+sudo mkdir -p /opt/homebrew/etc/nginx/ssl # HTTPS를 활성화하기 위한 SSL 인증서 및 키 파일을 저장하는 용도
 
-sudo openssl genpkey -algorithm RSA -out /opt/homebrew/etc/nginx/ssl/private.key
-sudo openssl req -new -key /opt/homebrew/etc/nginx/ssl/private.key -out /opt/homebrew/etc/nginx/ssl/csr.pem
-sudo openssl x509 -req -in /opt/homebrew/etc/nginx/ssl/csr.pem -signkey /opt/homebrew/etc/nginx/ssl/private.key -out /opt/homebrew/etc/nginx/ssl/selfsigned.crt
+sudo openssl genpkey -algorithm RSA -out /opt/homebrew/etc/nginx/ssl/private.key # RSA 알고리즘을 사용하여 개인 키를 생성하고 /opt/homebrew/etc/nginx/ssl/private.key에 저장
+sudo openssl req -new -key /opt/homebrew/etc/nginx/ssl/private.key -out /opt/homebrew/etc/nginx/ssl/csr.pem # 개인 키를 사용하여 CSR(Certificate Signing Request)을 생성하고 /opt/homebrew/etc/nginx/ssl/csr.pem에 저장
+sudo openssl x509 -req -in /opt/homebrew/etc/nginx/ssl/csr.pem -signkey /opt/homebrew/etc/nginx/ssl/private.key -out /opt/homebrew/etc/nginx/ssl/selfsigned.crt # CSR을 사용하여 자체 서명된 SSL 인증서를 생성하고 /opt/homebrew/etc/nginx/ssl/selfsigned.crt에 저장
 ```
 ```bash
-sudo vi /opt/homebrew/etc/nginx/nginx.conf
+sudo vi /opt/homebrew/etc/nginx/nginx.conf # 각 서버 블록과 관련된 설정뿐만 아니라 리소스 관리, 로깅, 파일 포함 등의 설정
 ```
 ```bash
-#user  nobody;
-worker_processes  1;
+#user  nobody;  # nginx 프로세스가 사용할 사용자 이름
+worker_processes  1;  # nginx가 사용할 워커 프로세스 수 설정 
 
-#error_log  logs/error.log;
-#error_log  logs/error.log  notice;
-#error_log  logs/error.log  info;
+#error_log  logs/error.log;  # 에러 로그 파일의 경로 
+#error_log  logs/error.log  notice;  # 에러 로그 레벨을 'notice'로 설정 
+#error_log  logs/error.log  info;  # 에러 로그 레벨을 'info'로 설정 
 
-#pid        logs/nginx.pid;
-
+#pid        logs/nginx.pid;  # nginx 프로세스의 PID 파일 경로 설정
 
 events {
-    worker_connections  1024;
+    worker_connections  1024;  # 한 워커 프로세스가 처리할 수 있는 최대 연결 수 설정
 }
 
 
 http {
-    include       mime.types;
-    default_type  application/octet-stream;
+    include       mime.types;  # mime 유형을 설정하는 파일을 포함
+    default_type  application/octet-stream;  # 기본 MIME 유형 설정
 
-    #log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-    #                  '$status $body_bytes_sent "$http_referer" '
-    #                  '"$http_user_agent" "$http_x_forwarded_for"';
+#   log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '  # 로그 형식 설정
+#                      '$status $body_bytes_sent "$http_referer" '  # 로그 형식의 일부로 요청 상태 및 바디 크기 포함
+#                      '"$http_user_agent" "$http_x_forwarded_for"';  # 로그 형식의 일부로 사용자 에이전트 및 프록시 정보 포함
 
-    #access_log  logs/access.log  main;
+#   access_log  logs/access.log  main;  # 요청에 대한 접근 로그를 'access.log' 파일에 기록
 
-    sendfile        on;
-    #tcp_nopush     on;
+    sendfile        on;  # 파일을 직접 전송하는 것을 활성화 
+    keepalive_timeout  65;  # 연결 유지 시간 설정
 
-    #keepalive_timeout  0;
-    keepalive_timeout  65;
+#   gzip  on;  # Gzip 압축 활성화
 
-    #gzip  on;
-
-#    server {
-#        listen       80;
-#        server_name  localhost;
-#
-#        #charset koi8-r;
-#
-#        #access_log  logs/host.access.log  main;
-#
-#        location / {
-#            root   html;
-#            index  index.html index.htm;
-#        }
-
-        #error_page  404              /404.html;
-
-        # redirect server error pages to the static page /50x.html
-        #
-#        error_page   500 502 503 504  /50x.html;
-#        location = /50x.html {
-#            root   html;
-#        }
-
-        # proxy the PHP scripts to Apache listening on 127.0.0.1:80
-        #
-        #location ~ \.php$ {
-        #    proxy_pass   http://127.0.0.1;
-        #}
-
-        # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
-        #
-        #location ~ \.php$ {
-        #    root           html;
-        #    fastcgi_pass   127.0.0.1:9000;
-        #    fastcgi_index  index.php;
-        #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
-        #    include        fastcgi_params;
-        #}
-
-        # deny access to .htaccess files, if Apache's document root
-        # concurs with nginx's one
-        #
-        #location ~ /\.ht {
-        #    deny  all;
-        #}
-#    }
-
-
-    # another virtual host using mix of IP-, name-, and port-based configuration
-    #
-    #server {
-    #    listen       8000;
-    #    listen       somename:8080;
-    #    server_name  somename  alias  another.alias;
-
-    #    location / {
-    #        root   html;
-    #        index  index.html index.htm;
-    #    }
-    #}
-
-
-    # HTTPS server
-    #
-    #server {
-    #    listen       443 ssl;
-    #    server_name  localhost;
-
-    #    ssl_certificate      cert.pem;
-    #    ssl_certificate_key  cert.key;
-
-    #    ssl_session_cache    shared:SSL:1m;
-    #    ssl_session_timeout  5m;
-
-    #    ssl_ciphers  HIGH:!aNULL:!MD5;
-    #    ssl_prefer_server_ciphers  on;
-
-    #    location / {
-    #        root   html;
-    #        index  index.html index.htm;
-    #    }
-    #}
-    include servers/*;
-    include /opt/homebrew/etc/nginx/sites-enabled/*;
-
+    include servers/*;  # 'servers' 디렉토리 내의 설정 파일들을 포함
+    include /opt/homebrew/etc/nginx/sites-enabled/*;  # 'sites-enabled' 디렉토리 내의 설정 파일들을 포함
 }
+
 ```
 ```bash
 sudo mkdir -p /opt/homebrew/etc/nginx/sites-available
-sudo vi /opt/homebrew/etc/nginx/sites-available/default
+sudo vi /opt/homebrew/etc/nginx/sites-available/default # 서버가 처리할 HTTP 및 HTTPS 요청에 대한 라우팅 및 리디렉션 등을 설정
 ```
 ```bash
 # /opt/homebrew/etc/nginx/sites-available/default
 server {
-    listen 80;
-    server_name localhost;  # 실제 도메인명으로 변경
+    listen 80;  # HTTP 요청을 받을 포트
+    server_name localhost;  # 서버 이름
 
     # HTTP -> HTTPS 리디렉션
     location / {
-        return 301 https://$host$request_uri;
+        return 301 https://$host$request_uri;  # 모든 HTTP 요청을 HTTPS로 리디렉션
     }
 }
 
 server {
-    listen 443 ssl;
-    server_name localhost;  # 실제 도메인명으로 변경
+    listen 443 ssl;  # HTTPS 요청을 받을 포트와 SSL 활성화
+    server_name localhost;  # 서버 이름
 
-    ssl_certificate /opt/homebrew/etc/nginx/ssl/selfsigned.crt;
-    ssl_certificate_key /opt/homebrew/etc/nginx/ssl/private.key;
+    ssl_certificate /opt/homebrew/etc/nginx/ssl/selfsigned.crt;  # SSL 인증서 경로
+    ssl_certificate_key /opt/homebrew/etc/nginx/ssl/private.key;  # SSL 인증서 키 경로
 
     # SSL 설정
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_protocols TLSv1.2 TLSv1.3;  # 지원하는 SSL/TLS 프로토콜 버전 
+    ssl_prefer_server_ciphers on;  # 서버 측 암호화 우선 사용
+    ssl_ciphers HIGH:!aNULL:!MD5;  # 사용할 암호화 알고리즘 지정 (HIGH 보안 등급 암호화만 허용, NULL 및 MD5 제외)
 
     # 요청에 대한 로깅
-    access_log /var/log/nginx/frontend_access.log;
-    error_log /var/log/nginx/frontend_error.log;
+    access_log /var/log/nginx/frontend_access.log;  # HTTP 요청에 대한 접근 로그 파일 경로
+    error_log /var/log/nginx/frontend_error.log;  # 오류 로그 파일 경로
 
-    location / {
+    location / {  # 웹 애플리케이션의 루트 디렉토리로 들어오는 요청 처리
         # 프론트엔드로 들어오는 요청을 백엔드 서버로 전달
-        proxy_pass http://localhost:8080;  # backend는 실제 백엔드 서버의 이름 또는 IP
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://localhost:8080;  # 요청을 실제 백엔드 서버로 전달
+        proxy_set_header Host $host;  # 원본 요청의 호스트 헤더를 백엔드 서버로 전달
+        proxy_set_header X-Real-IP $remote_addr;  # 클라이언트의 실제 IP 주소를 백엔드 서버로 전달
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  # 프록시 체인을 통해 전달된 모든 IP를 백엔드 서버로 전달
+        proxy_set_header X-Forwarded-Proto $scheme;  # 사용된 프로토콜(HTTP/HTTPS)을 백엔드 서버로 전달
     }
 }
 ```
 ```bash
 sudo ln -s /opt/homebrew/etc/nginx/sites-available/default /opt/homebrew/etc/nginx/sites-enabled/default
-```
-```bash
-sudo vi /opt/homebrew/etc/nginx/nginx.conf # listen 8080; -> listen 80;으로 수정 : Homebrew로 설치한 Nginx의 모든 파일은 /opt/homebrew 경로 아래에 위치한 파일들을 수정해야 한다.
-```
-```bash
-sudo nginx -t
-sudo nginx -s reload
-```
-```bash
-ls -l /opt/homebrew/etc/nginx/sites-enabled/
-sudo vi /opt/homebrew/etc/nginx/sites-available/default
-```
-```bash
-# /opt/homebrew/etc/nginx/sites-available/default
-server {
-    listen 80;
-    server_name localhost;  # 실제 도메인명으로 변경
-
-    # HTTP -> HTTPS 리디렉션
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name localhost;  # 실제 도메인명으로 변경
-
-    ssl_certificate /opt/homebrew/etc/nginx/ssl/selfsigned.crt;
-    ssl_certificate_key /opt/homebrew/etc/nginx/ssl/private.key;
-
-    # SSL 설정
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    # 요청에 대한 로깅
-    access_log /var/log/nginx/frontend_access.log;
-    error_log /var/log/nginx/frontend_error.log;
-
-    location / {
-        # 프론트엔드로 들어오는 요청을 백엔드 서버로 전달
-        proxy_pass http://localhost:8080;  # backend는 실제 백엔드 서버의 이름 또는 IP
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-```bash
-sudo rm /opt/homebrew/etc/nginx/sites-enabled/default
-sudo ln -s /opt/homebrew/etc/nginx/sites-available/default /opt/homebrew/etc/nginx/sites-enabled/default
-```
-```bash
-grep include /opt/homebrew/etc/nginx/nginx.conf
 ```
 ```bash
 sudo mkdir -p /var/log/nginx
