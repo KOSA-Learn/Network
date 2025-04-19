@@ -42,6 +42,383 @@
   NAT는 LAN Segment의 내부 통신, Bridge의 외부 연결과 유사한 기능을 제공하지만 LAN Segment와 Bridge를 결합한 것이 아닌 가상 라우터, 스위치, DHCP 서버가 통합된 별도의 가상 네트워크 인프라를 구성한다.
 </details>
 
+<details>
+  <summary> Proxy 서버의 역할과 구성 방법: Forward Proxy, Reverse Proxy, RDS Proxy </summary>
+  
+## Proxy
+
+  **프록시**는 클라이언트와 서버 간의 **중계자**로 클라이언트의 요청을 서버로 전달하고 서버의 응답을 클라이언트에 전달하는 역할을 한다.
+
+## Forward Proxy
+    
+  **역할:**
+	포워드 프록시는 클라이언트의 요청을 대신하여 서버로 전달하는 프록시이며 클라이언트는 직접 서버와 연결하지 않고 포워드 프록시를 통해 요청을 보내고 응답을 받는다.
+ 
+  **주요 기능:** 
+  - 클라이언트의 요청을 대신 처리한다.
+  - **인터넷 필터링:** 특정 사이트의 접근을 제한한다.
+  - **익명화:** 사용자의 IP를 숨겨서 익명으로 웹을 서핑한다.
+  - **캐싱:** 자주 요청되는 데이터를 캐시하여 빠른 응답을 제공한다.
+
+  **동작 흐름:**
+  1. **클라이언트 요청:** 클라이언트가 웹 요청을 보낸다.
+  2. **프록시 서버:** 요청은 포워드 프록시 서버로 전달되고 요청을 실제 웹 서버로 전달한다.
+  3. **서버 응답:** 실제 서버에서 응답을 포워드 프록시 서버로 보낸다.
+  4. **클라이언트 응답:** 포워드 프록시 서버가 응답을 클라이언트로 전달한다.
+
+  **설정 (예: NGINX로 설정):**
+```bash
+sudo apt update && sudo apt install squid
+sudo nano /etc/squid/squid.conf
+
+wget http://nginx.org/download/nginx-1.18.0.tar.gz
+tar -xzvf nginx-1.18.0.tar.gz
+
+git clone https://github.com/chobits/ngx_http_proxy_connect_module.git # ngx_http_proxy_connect_module 모듈을 추가
+```
+```bash
+server {
+    listen 3128; # 프록시 서버에 접근할 때 사용할 포트
+    server_name localhost;
+
+    # dns resolver used by forward proxying
+    resolver 8.8.8.8; # 사내 DNS를 통해서 질의를 해야 한다면 사내 DNS 사용 필요
+
+    access_log /data/logs/nginx/message.access.log;
+    error_log /data/logs/nginx/message.error.log;
+
+    # forward proxy for CONNECT request
+    proxy_connect; # CONNECT HTTP method 허용
+    proxy_connect_allow         443 563; # CONNECT method가 연결할 수 있는 포트 리스트(default: 443 563)
+    proxy_connect_connect_timeout 120s; # 프록시 서버와의 connection 유지시간
+    proxy_connect_read_timeout 120s; # 프록시 서버로부터 응답을 가져올 때의 timeout 시간
+    proxy_connect_send_timeout 120s; # 프록시 서버에 요청을 보낼 때의 timeout 시간
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Enable passing the body and query string
+        proxy_method $request_method;
+        proxy_set_body $request_body;
+    }
+}
+```
+```bash
+cd /usr/local/nginx/sbin
+sudo ./nginx
+tail -f /usr/local/nginx/logs/access.log
+```
+
+  **예시:**
+  - **익명 프록시:** 사용자가 직접 웹사이트에 접속하지 않고 프록시를 통해 접속하여 IP를 숨긴다.
+  - **인터넷 필터링:** 특정 기업이나 학교에서 불필요한 웹사이트를 차단할 때 사용한다.
+
+  **출처:** [Squid Forward Proxy](https://with-cloud.tistory.com/58)
+
+## Reverse Proxy
+
+  **역할:**
+	리버스 프록시는 클라이언트가 요청하는 서버가 아닌 중간의 리버스 프록시 서버가 요청을 백엔드 서버로 전달하여 처리한다.
+
+  **주요 기능:**
+  - **로드 밸런싱:** 여러 서버로 요청을 분배하여 부하를 분산한다.
+  - **보안 강화:** 실제 서버의 IP를 숨겨 보안을 향상한다.
+  - **SSL 종료:** SSL 연결을 리버스 프록시 서버에서 처리하고 실제 서버는 암호화되지 않은 데이터만 처리한다.
+
+  **동작 흐름:**
+  1. **클라이언트 요청:** 클라이언트가 요청을 리버스 프록시 서버로 보낸다.
+  2. **리버스 프록시:** 리버스 프록시 서버가 요청을 백엔드 서버로 전달한다.
+  3. **백엔드 서버 응답:** 백엔드 서버에서 응답을 리버스 프록시 서버로 전달한다.
+  4. **클라이언트 응답:** 리버스 프록시 서버가 응답을 클라이언트에게 전달한다.
+
+  **설정 (예: NGINX로 설정):**
+```bash
+brew install nginx
+sudo mkdir -p /opt/homebrew/etc/nginx/ssl
+
+sudo openssl genpkey -algorithm RSA -out /opt/homebrew/etc/nginx/ssl/private.key
+sudo openssl req -new -key /opt/homebrew/etc/nginx/ssl/private.key -out /opt/homebrew/etc/nginx/ssl/csr.pem
+sudo openssl x509 -req -in /opt/homebrew/etc/nginx/ssl/csr.pem -signkey /opt/homebrew/etc/nginx/ssl/private.key -out /opt/homebrew/etc/nginx/ssl/selfsigned.crt
+```
+```bash
+sudo vi /opt/homebrew/etc/nginx/nginx.conf
+```
+```bash
+#user  nobody;
+worker_processes  1;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    #log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+    #                  '$status $body_bytes_sent "$http_referer" '
+    #                  '"$http_user_agent" "$http_x_forwarded_for"';
+
+    #access_log  logs/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+#    server {
+#        listen       80;
+#        server_name  localhost;
+#
+#        #charset koi8-r;
+#
+#        #access_log  logs/host.access.log  main;
+#
+#        location / {
+#            root   html;
+#            index  index.html index.htm;
+#        }
+
+        #error_page  404              /404.html;
+
+        # redirect server error pages to the static page /50x.html
+        #
+#        error_page   500 502 503 504  /50x.html;
+#        location = /50x.html {
+#            root   html;
+#        }
+
+        # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+        #
+        #location ~ \.php$ {
+        #    proxy_pass   http://127.0.0.1;
+        #}
+
+        # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+        #
+        #location ~ \.php$ {
+        #    root           html;
+        #    fastcgi_pass   127.0.0.1:9000;
+        #    fastcgi_index  index.php;
+        #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+        #    include        fastcgi_params;
+        #}
+
+        # deny access to .htaccess files, if Apache's document root
+        # concurs with nginx's one
+        #
+        #location ~ /\.ht {
+        #    deny  all;
+        #}
+#    }
+
+
+    # another virtual host using mix of IP-, name-, and port-based configuration
+    #
+    #server {
+    #    listen       8000;
+    #    listen       somename:8080;
+    #    server_name  somename  alias  another.alias;
+
+    #    location / {
+    #        root   html;
+    #        index  index.html index.htm;
+    #    }
+    #}
+
+
+    # HTTPS server
+    #
+    #server {
+    #    listen       443 ssl;
+    #    server_name  localhost;
+
+    #    ssl_certificate      cert.pem;
+    #    ssl_certificate_key  cert.key;
+
+    #    ssl_session_cache    shared:SSL:1m;
+    #    ssl_session_timeout  5m;
+
+    #    ssl_ciphers  HIGH:!aNULL:!MD5;
+    #    ssl_prefer_server_ciphers  on;
+
+    #    location / {
+    #        root   html;
+    #        index  index.html index.htm;
+    #    }
+    #}
+    include servers/*;
+    include /opt/homebrew/etc/nginx/sites-enabled/*;
+
+}
+```
+```bash
+sudo mkdir -p /opt/homebrew/etc/nginx/sites-available
+sudo vi /opt/homebrew/etc/nginx/sites-available/default
+```
+```bash
+# /opt/homebrew/etc/nginx/sites-available/default
+server {
+    listen 80;
+    server_name localhost;  # 실제 도메인명으로 변경
+
+    # HTTP -> HTTPS 리디렉션
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name localhost;  # 실제 도메인명으로 변경
+
+    ssl_certificate /opt/homebrew/etc/nginx/ssl/selfsigned.crt;
+    ssl_certificate_key /opt/homebrew/etc/nginx/ssl/private.key;
+
+    # SSL 설정
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 요청에 대한 로깅
+    access_log /var/log/nginx/frontend_access.log;
+    error_log /var/log/nginx/frontend_error.log;
+
+    location / {
+        # 프론트엔드로 들어오는 요청을 백엔드 서버로 전달
+        proxy_pass http://localhost:8080;  # backend는 실제 백엔드 서버의 이름 또는 IP
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+```bash
+sudo ln -s /opt/homebrew/etc/nginx/sites-available/default /opt/homebrew/etc/nginx/sites-enabled/default
+```
+```bash
+sudo vi /opt/homebrew/etc/nginx/nginx.conf # listen 8080; -> listen 80;으로 수정 : Homebrew로 설치한 Nginx의 모든 파일은 /opt/homebrew 경로 아래에 위치한 파일들을 수정해야 한다.
+```
+```bash
+sudo nginx -t
+sudo nginx -s reload
+```
+```bash
+ls -l /opt/homebrew/etc/nginx/sites-enabled/
+sudo vi /opt/homebrew/etc/nginx/sites-available/default
+```
+```bash
+# /opt/homebrew/etc/nginx/sites-available/default
+server {
+    listen 80;
+    server_name localhost;  # 실제 도메인명으로 변경
+
+    # HTTP -> HTTPS 리디렉션
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name localhost;  # 실제 도메인명으로 변경
+
+    ssl_certificate /opt/homebrew/etc/nginx/ssl/selfsigned.crt;
+    ssl_certificate_key /opt/homebrew/etc/nginx/ssl/private.key;
+
+    # SSL 설정
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 요청에 대한 로깅
+    access_log /var/log/nginx/frontend_access.log;
+    error_log /var/log/nginx/frontend_error.log;
+
+    location / {
+        # 프론트엔드로 들어오는 요청을 백엔드 서버로 전달
+        proxy_pass http://localhost:8080;  # backend는 실제 백엔드 서버의 이름 또는 IP
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+```bash
+sudo rm /opt/homebrew/etc/nginx/sites-enabled/default
+sudo ln -s /opt/homebrew/etc/nginx/sites-available/default /opt/homebrew/etc/nginx/sites-enabled/default
+```
+```bash
+grep include /opt/homebrew/etc/nginx/nginx.conf
+```
+```bash
+sudo mkdir -p /var/log/nginx
+sudo nginx -t
+sudo nginx -s reload
+curl -I http://localhost
+```
+<img width="1110" alt="Image" src="https://github.com/user-attachments/assets/aa8038bd-8de9-452f-8bdc-201a17be2adc" />
+
+  **예시:**
+  - **웹 애플리케이션 로드 밸런싱:** 리버스 프록시를 사용하여 여러 웹 서버로 트래픽을 분배하고 서버 부하를 분산시킬 수 있다.
+  - **API 서버 보호:** 클라이언트의 요청을 리버스 프록시 서버로 보내고 실제 API 서버는 보호된다.
+
+
+## RDS Proxy
+
+  **역할:**
+	RDS 프록시는 애플리케이션과 RDS 간의 연결을 관리하고 성능을 최적화하는 프록시이다. 데이터베이스 연결 풀링 및 자동 장애 조치를 제공하며 연결 관리의 복잡성을 줄인다.
+
+  **주요 기능:**
+  - **연결 풀링:** 데이터베이스 연결을 효율적으로 관리하여 성능 최적화한다.
+  - **자동 장애 조치:** 데이터베이스 장애 시 자동으로 다른 인스턴스로 연결을 전환한다.
+  - **성능 최적화:** 연결 재사용과 풀링을 통해 애플리케이션의 성능을 높인다.
+
+  **동작 흐름:**
+  1. **애플리케이션 요청:** 애플리케이션은 데이터베이스 연결을 위해 RDS 프록시 서버에 요청을 보낸다.
+  2. **RDS 프록시:** RDS 프록시가 데이터베이스 연결 풀을 관리하고 실제 RDS 인스턴스에 연결하여 데이터베이스 요청을 처리한다.
+  3. **응답:** RDS 인스턴스에서 결과를 RDS 프록시로 전달한다.
+  4. **애플리케이션 응답:** RDS 프록시가 결과를 애플리케이션에 전달한다.
+
+  **설정 (AWS RDS 프록시 설정):**
+  1. **AWS RDS 콘솔 접속:** AWS 관리 콘솔에서 RDS Proxy를 설정한다.
+  2. **RDS 프록시 생성:**
+	  - **VPC**, **Subnets**, **Security Groups** 를 설정한다.
+    - **Target RDS instance** 를 지정한다.
+  3. **데이터베이스 연결:** 애플리케이션에서 RDS 프록시 엔드포인트를 사용하여 데이터베이스에 연결한다.
+	   
+```bash
+# 애플리케이션에서 RDS 프록시를 통해 데이터베이스 연결
+mysql -h [rds-proxy-endpoint] -u [username] -p
+```
+
+  **예시:**
+  - **웹 애플리케이션:** RDS 프록시를 사용하여 데이터베이스 연결을 관리하고 성능을 최적화한다.
+  - **대규모 데이터베이스 서비스:** 데이터베이스 연결 수가 많을 경우 RDS 프록시를 사용해 연결을 풀링하고 효율적으로 처리한다.
+
+
+## 요약
+- **포워드 프록시**는 클라이언트의 요청을 대신 처리하며 **익명화**, **인터넷 필터링** 등에 사용된다.
+- **리버스 프록시**는 클라이언트의 요청을 백엔드 서버로 전달하여 **로드 밸런싱**, **보안 강화** 등에 사용된다.
+- **RDS 프록시**는 데이터베이스 연결을 관리하고 성능을 최적화하며 **연결 풀링**과 **자동 장애 조치**를 제공한다.
+</details>
+
 
 ### 김동욱
 <details>
