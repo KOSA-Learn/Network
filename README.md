@@ -864,3 +864,40 @@ A. 심볼릭 링크 구조를 사용하면 설정 파일을 **한 곳(`sites-ava
 L4 로드밸런싱은 단순한 서버 분산이 필요할 때, L7은 컨텐츠 기반 라우팅이나 보안 정책이 필요할 경우 사용
 	
 </details>
+
+<details>
+	<summary> Keepalived </summary>
+
+ ### Keepalived란?
+ Linux 기반 서버에서 고가용성과 로드밸런싱을 위해 사용되는 서비스
+ 원래는 Linux Virtual Server 를 제어하기 위한 도구였지만, VirtualIP 를 관리하면서 Failover + Health Check 기능을 제공해 고 가용성 클러스터를 쉽게 구축 가능
+
+ ### 주요 기능
+ > 1. VRRP : Active/Backup 구조의 IP Failover 제공 ( Master가 죽으면 Backup이 VIP를 인계)
+>  2. Health Check : 서버 사애 체크 기능 장애 발생시 VIP를 다른 서버로 넘김
+>  3. LVS 로드밸런싱 : Layer 4 로드밸런싱 구성 가능
+
+ ### Keepalived 로드밸런싱 구조
+ 1. Active-Passive 방식(HA)
+ >  1. Master 서버에만 VIP가 붙어 서비스
+>   2. Master가 죽으면 Backup 서버가 인계받아 즉시 서비스
+>   3. 단순 장애 대응용
+
+ 2. LVS기반 로드밸런싱
+> 1. Keepalived + ipvsadm 조합
+> 2. VIP를 사용해 여러 리얼 서버로 트래픽 분산
+> 3. Round Robin, Least Connection, Source Hash 등 다양한 방식 제공
+> 4. 주로 Layer4 로드밸런서로 사용
+
+ ### 장점
+ 1. 가벼움
+ 2. 설정이 비교적 쉽과 직관적
+ 3. VRRP로 자동 Failover 시스템
+ 4. LVS를 통한 고성능 Layer4 로드밸런싱
+ 5. haproxy 같은 Layer7 로드밸서와 병행 사용 가능
+
+ ### 주의점
+ 1. 자체적으로 Layer7 로드밸런싱은 불가능
+ 2. VRRP 우선순위, 스크립트 설정 잘못하면 IP 충돌 가능
+    
+ </details>
