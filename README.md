@@ -1873,13 +1873,9 @@ L4 로드밸런싱은 단순한 서버 분산이 필요할 때, L7은 컨텐츠 
   <summary> Calico란 무엇인가 ?</summary>
 
   
-  ## Calico란?
+  ## Calico란 무엇인가 ?
 
-  ### 정의
-
-**Calico란? Kubernetes에서 Pod 간 네트워크 통신과 네트워크 보안 정책을 구현하는 CNI 플러그인**
-
-Kubernetes란? 기본적으로 자체적인 Pod 네트워크 기능을 제공하지 않기 때문에 **CNI 플러그인의 설치가 필수 전제 조건**
+  **역할:** Kubernetes에서 **Pod 간 네트워크 통신과 네트워크 보안 정책을 구현하는 CNI 플러그인**으로 기본적으로 자체적인 Pod 네트워크 기능을 제공하지 않기 때문에 CNI 플러그인의 설치가 Kubernetes에서 필수
 
 
 ### Calico의 주요 기능
@@ -1888,7 +1884,7 @@ Kubernetes란? 기본적으로 자체적인 Pod 네트워크 기능을 제공하
 | --- | --- | --- |
 | **Pod 네트워크 구성 기능** | 각 Pod에 고유 IP 주소를 할당하고, Pod 간 통신 경로를 설정하는 기능 | 아파트 입주자에게 주소를 배정하고 도로를 연결하는 작업 |
 | **네트워크 정책 기능** | 특정 Pod 간 통신을 허용하거나 차단하는 보안 정책 설정 기능 | 특정 집에 자물쇠를 설치하여 허가된 사람만 출입 가능하게 하는 것 |
-| **고급 라우팅 기능 (BGP)** | BGP 프로토콜을 활용한 외부 네트워크 라우팅 기능 (고성능 환경 선택 사항) | 교통체증을 피하기 위해 우회도로를 활용하는 고속 경로 설정 |
+| **고급 라우팅 기능 (BGP)** | BGP 프로토콜을 활용한 외부 네트워크 라우팅 기능 | 교통체증을 피하기 위해 우회도로를 활용하는 고속 경로 설정 |
 
 
 ## Kubernetes Dashboard 접속 문제와 Calico의 관계
@@ -1966,7 +1962,7 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
 	
 ## Cloud Load Balancer
 
-### 1. Classic Load Balancer (ELB)
+### 1. Elastic Load Balancer (ELB)
 
 - **역할**: L4(TCP)·L7(HTTP) 트래픽 모두 분산
 - **특징**
@@ -1975,7 +1971,7 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
     - 대상(Target) → 인스턴스(EC2) 단위 등록
 - **사용 예시**
     - 레거시 웹 애플리케이션 앞단에 기본적인 요청 분산
-    - 특별한 HTTP 헤더·경로 기반 분기가 필요 없을 때
+    - 특별한 HTTP 헤더·경로 기반 분기가 필요 없는 경우
 - **장점 / 단점**
     -  구성 단순·빠른 배포
     -  HTTP 레벨 정책 부족, 세부 튜닝 제한
@@ -1983,9 +1979,9 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
     
     1단계: 기본 구성
     
-    - 이름: my-classic-lb
+    - 이름: `my-classic-lb`
     - VPC: ap-northeast-2 기본 VPC
-    - 가용영역: ap-northeast-2a, 2c (퍼블릭 서브넷 선택)
+    - 가용영역: ap-northeast-2a, ap-northeast-2c (퍼블릭 서브넷 선택)
     
     2단계: 보안 설정
     
@@ -1995,7 +1991,7 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
     
     3단계: 보안 그룹
     
-    - 이름: my-clb-sg
+    - 이름: `my-clb-sg`
     - 설명: Security group for Classic Load Balancer
     인바운드 규칙:
     - HTTP(80) - 0.0.0.0/0
@@ -2042,14 +2038,14 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
     
     1단계: 기본 구성
     
-    - 이름: my-application-lb
+    - 이름: `my-application-lb`
     - 체계: 인터넷 경계
     - IP 주소 유형: IPv4
     
     2단계: 네트워크 매핑
     
     - VPC: ap-northeast-2 기본 VPC
-    - 매핑: ap-northeast-2a, 2c (퍼블릭 서브넷)
+    - 매핑: ap-northeast-2a, ap-northeast-2c (퍼블릭 서브넷)
     - 가용영역당 서브넷 1개 선택
     
     3단계: 보안 설정
@@ -2060,7 +2056,7 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
     
     4단계: 보안 그룹
     
-    - 이름: my-alb-sg
+    - 이름: `my-alb-sg`
     - 설명: Security group for Application Load Balancer
     인바운드 규칙:
     - HTTP(80) - 0.0.0.0/0
@@ -2137,7 +2133,7 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
     
     1단계: 기본 구성
     
-    - 이름: my-network-lb
+    - 이름: `my-network-lb`
     - 체계: 인터넷 경계
     - IP 주소 유형: IPv4
     
@@ -2162,7 +2158,7 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
     
     5단계: 대상 그룹 설정
     
-    - 이름: game-server-group
+    - 이름: `game-server-group`
     - 프로토콜: TCP
     - 포트: 443
     - 대상 유형: 인스턴스
@@ -2235,6 +2231,7 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
         server web1.example.com;
         server web2.example.com;
     }
+    
     server {
         listen 80;
         location / {
