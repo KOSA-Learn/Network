@@ -1851,7 +1851,457 @@ L4 로드밸런싱은 단순한 서버 분산이 필요할 때, L7은 컨텐츠 
 
  # Kubernetes
 
+### 이정민
+<details>
+  <summary> 왜 Kubernetes를 설치하려면 이러한 구성 요소들과 설정이 왜 반드시 필요한 걸까 ?</summary>
+
+| 단계 | 목적 | 필요 이유 |
+| --- | --- | --- |
+| 방화벽 해제 | 네트워크 포트 차단 해제 | API 서버, etcd, kubelet 등의 통신 포트를 방화벽이 차단하면 클러스터 구성 실패 |
+| swap 비활성화 | 메모리 swap 기능 비활성화 | kubelet이 swap된 메모리를 감지하면 리소스 관리 오류 발생 |
+| iptables 설정 | 네트워크 필터링 기능 활성화 | Pod 간 또는 서비스 간 패킷 라우팅 처리를 위한 iptables 커널 모듈 필요 |
+| containerd 설치 | container runtime 환경 구성 | Kubernetes가 Pod를 실행하기 위해 container runtime 필요 (Docker 대신 containerd 권장) |
+| CRI 활성화 | kubelet과 containerd 간 연동 설정 | kubelet이 containerd와 연동하여 Pod를 실행하려면 CRI 인터페이스 활성화 필요 |
+| 패키지 저장소 등록 | kubernetes 패키지 설치 경로 구성 | yum을 통해 kubeadm, kubelet, kubectl을 설치하려면 공식 저장소 등록 필수 | 
+| SELinux 완화 설정 | kernel 보안 정책 완화 | SELinux가 enforcing 모드일 경우 일부 Kubernetes 기능이 차단됨 (파일 접근 등) |
+| 필수 패키지 설치 | cluster 초기화 및 조작 도구 설치 | kubeadm으로 초기화, kubelet으로 실행, kubectl로 클러스터 조작 수행 | 
+| 클러스터 초기화 | control plane 컴포넌트 배포 | etcd, kube-apiserver, scheduler, controller-manager 구성 | 
+| CNI 플러그인 설치 | Pod 네트워크 구성 | Kubernetes는 기본 네트워크 미제공 → Calico, Flannel 등을 통해 Pod 간 통신 가능하게 구성 |
+</details>
+
+<details>
+  <summary> Calico란 무엇인가 ?</summary>
+
+  
+  ## Calico란?
+
+  ### 정의
+
+**Calico란? Kubernetes에서 Pod 간 네트워크 통신과 네트워크 보안 정책을 구현하는 CNI 플러그인**
+
+Kubernetes란? 기본적으로 자체적인 Pod 네트워크 기능을 제공하지 않기 때문에 **CNI 플러그인의 설치가 필수 전제 조건**
+
+
+### Calico의 주요 기능
+
+| 기능 명칭 | 기능 설명 | 예시 |
+| --- | --- | --- |
+| **Pod 네트워크 구성 기능** | 각 Pod에 고유 IP 주소를 할당하고, Pod 간 통신 경로를 설정하는 기능 | 아파트 입주자에게 주소를 배정하고 도로를 연결하는 작업 |
+| **네트워크 정책 기능** | 특정 Pod 간 통신을 허용하거나 차단하는 보안 정책 설정 기능 | 특정 집에 자물쇠를 설치하여 허가된 사람만 출입 가능하게 하는 것 |
+| **고급 라우팅 기능 (BGP)** | BGP 프로토콜을 활용한 외부 네트워크 라우팅 기능 (고성능 환경 선택 사항) | 교통체증을 피하기 위해 우회도로를 활용하는 고속 경로 설정 |
+
+
+## Kubernetes Dashboard 접속 문제와 Calico의 관계
+
+### 대표적인 문제 현상
+
+- **흰 화면 또는 빈 페이지 출력**
+- **404 또는 타임아웃 에러**
+- **Dashboard Pod는 정상이나 웹 접속 실패**
+
+> 이러한 현상은 대부분 Calico의 설치 실패 또는 Pod 간 네트워크 단절의 원인
+> 
+
+
+### 문제 원인 분석
+
+| 원인 명칭 | 상세 설명 | 점검 방법 |
+| --- | --- | --- |
+| **Calico 설치 실패** | YAML 파일 오류, 이미지 다운로드 실패, 네임스페이스 문제 등으로 인해 Pod 미기동 상태 | `kubectl get pods -n kube-system` 명령어로 calico 관련 Pod 상태 확인 |
+| **Pod 간 통신 불능 상태** | iptables 설정 또는 커널 모듈 누락으로 인해 Pod 간 트래픽이 차단됨 | `ping`, `curl` 명령어로 Pod 간 직접 통신 확인 |
+| **Kernel 네트워크 설정 누락** | `br_netfilter`, `ip_forward` 설정이 누락되면 Kubernetes 네트워크 트래픽 처리 실패 | `sysctl` 명령어로 커널 파라미터 값 확인 |
+| **DNS 해석 실패** | CoreDNS Pod의 장애로 인해 Cluster 내부 DNS 해석 불가 | `kubectl get pods -n kube-system`에서 `coredns` 상태 확인 |
+
+
+### 문제 해결을 위한 점검 항목
+
+1. **Calico YAML 파일 적용 여부**
+    - `calico.yaml`, `calico-custom.yaml`이 모두 적용되었는지 확인
+2. **커널 네트워크 설정 값 확인**
+    
+    ```bash
+    sysctl net.bridge.bridge-nf-call-iptables
+    sysctl net.ipv4.ip_forward
+    ```
+    
+3. **Calico Pod 상태 점검**
+    
+    ```bash
+    kubectl get pods -n kube-system
+    ```
+    
+4. **SELinux 상태 점검**
+    
+    ```bash
+    getenforce
+    ```
+    
+    - `Enforcing` 상태라면 `Permissive`로 변경 권장
+
+
+### 예시
+
+> Kubernetes 내부 네트워크는 아파트에 입주한 세대(Pod)마다 인터넷 회선을 설치하는 과정과 같으며 Calico는 이 회선을 연결해 주는 통신사(CNI Provider) 역할
+> 
+> 통신사가 없다면 전화도 인터넷도 안 되는 것처럼 CNI 없이 Pod 간 통신은 불가능
+> 
+
+Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 때문에 **Calico가 정상적으로 설치되지 않으면 동작 자체가 불가능**
+
+
+## 요약
+
+- **Calico는 Kubernetes Pod 간 네트워크 연결을 위한 핵심 구성 요소**
+- **네트워크 정책 기능**을 통해 Pod 수준의 보안 제어 가능
+- **CNI 플러그인 설치 여부**는 Kubernetes 기능 정상 작동의 전제 조건
+- Dashboard, Metrics Server, Ingress 등은 모두 **Pod 간 통신**을 기반으로 동작하므로 **Calico의 정상 동작 여부가 클러스터 품질에 직접적인 영향을 미침**
+</details>
+
+
  # Cloud
+
+### 이정민
+<details>
+  <summary> Cloud & Software Load Balancer 비교 및 설정 방법</summary>
+	
+## Cloud Load Balancer
+
+### 1. Classic Load Balancer (ELB)
+
+- **역할**: L4(TCP)·L7(HTTP) 트래픽 모두 분산
+- **특징**
+    - HTTP(S), TCP, SSL 지원
+    - 간단한 설정으로 빠르게 시작 가능
+    - 대상(Target) → 인스턴스(EC2) 단위 등록
+- **사용 예시**
+    - 레거시 웹 애플리케이션 앞단에 기본적인 요청 분산
+    - 특별한 HTTP 헤더·경로 기반 분기가 필요 없을 때
+- **장점 / 단점**
+    -  구성 단순·빠른 배포
+    -  HTTP 레벨 정책 부족, 세부 튜닝 제한
+- **설정 방법**
+    
+    1단계: 기본 구성
+    
+    - 이름: my-classic-lb
+    - VPC: ap-northeast-2 기본 VPC
+    - 가용영역: ap-northeast-2a, 2c (퍼블릭 서브넷 선택)
+    
+    2단계: 보안 설정
+    
+    - SSL 인증서: ACM에서 발급된 인증서 선택
+    - 보안 정책: ELBSecurityPolicy-2016-08 선택
+    - SSL 포트: 443
+    
+    3단계: 보안 그룹
+    
+    - 이름: my-clb-sg
+    - 설명: Security group for Classic Load Balancer
+    인바운드 규칙:
+    - HTTP(80) - 0.0.0.0/0
+    - HTTPS(443) - 0.0.0.0/0
+    아웃바운드 규칙:
+    - 모든 트래픽(0-65535) - 0.0.0.0/0
+    
+    4단계: 리스너 및 라우팅
+    
+    - 리스너 1: HTTPS:443 → HTTP:80
+    - 리스너 2: HTTP:80 → HTTP:80 (선택사항: HTTPS 리다이렉트)
+    
+    5단계: 상태 검사 구성
+    
+    - 프로토콜: HTTP
+    - 포트: 80
+    - 경로: /health.html
+    - 응답 제한 시간: 5초
+    - 간격: 30초
+    - 비정상 임계값: 2
+    - 정상 임계값: 10
+    
+    6단계: EC2 인스턴스 등록
+    
+    - 인스턴스 선택
+    - 교차 영역 로드 밸런싱 활성화
+    - Connection Draining 활성화 (300초)
+
+
+### 2. Application Load Balancer (ALB)
+
+-  **역할**: L7 전용 HTTP/HTTPS 분산
+-  **특징**
+    - 경로 기반(Path), 호스트 기반(Host) 라우팅
+    - WebSocket, HTTP/2 지원
+    - 인증(OIDC), redirection·rewrite
+-  **사용 예시**
+    - `/api/*` 는 API 서버, `/static/*` 는 정적 콘텐츠 서버로 분기
+    - 도메인별( `app.example.com`, `api.example.com`) 트래픽 분리
+-  **장점 / 단점**
+    -  세밀한 HTTP 레벨 제어, A/B 테스트 지원
+    -  TCP 레벨보단 약간의 latency 증가, 과금이 ELB보다 높을 수 있음
+- **설정 방법**
+    
+    1단계: 기본 구성
+    
+    - 이름: my-application-lb
+    - 체계: 인터넷 경계
+    - IP 주소 유형: IPv4
+    
+    2단계: 네트워크 매핑
+    
+    - VPC: ap-northeast-2 기본 VPC
+    - 매핑: ap-northeast-2a, 2c (퍼블릭 서브넷)
+    - 가용영역당 서브넷 1개 선택
+    
+    3단계: 보안 설정
+    
+    - SSL 인증서: ACM 인증서 선택
+    - 보안 정책: ELBSecurityPolicy-2016-08
+    - ALPN 정책: HTTP1 및 HTTP2 지원
+    
+    4단계: 보안 그룹
+    
+    - 이름: my-alb-sg
+    - 설명: Security group for Application Load Balancer
+    인바운드 규칙:
+    - HTTP(80) - 0.0.0.0/0
+    - HTTPS(443) - 0.0.0.0/0
+    아웃바운드 규칙:
+    - 모든 트래픽(0-65535) - 0.0.0.0/0
+    
+    5단계: 리스너 및 라우팅
+    
+    - HTTPS:443 리스너 추가
+    - HTTP:80 리스너 추가 (HTTPS로 리다이렉트 규칙 설정)
+    
+    6단계: 대상 그룹 구성
+    [웹 서버 그룹]
+    
+    - 이름: `web-target-group`
+    - 프로토콜 버전: HTTP1
+    - 프로토콜: HTTP:80
+    - 대상 유형: 인스턴스
+    - 경로 패턴: /web/*
+    - 상태 검사:
+        - 프로토콜: HTTP
+        - 경로: /health.html
+        - 포트: traffic-port
+        - 정상 임계값: 5
+        - 비정상 임계값: 2
+        - 제한 시간: 5초
+        - 간격: 30초
+        - 성공 코드: 200
+    
+    [API 서버 그룹]
+    
+    - 이름: `api-target-group`
+    - 프로토콜 버전: HTTP1
+    - 프로토콜: HTTP:8080
+    - 대상 유형: 인스턴스
+    - 경로 패턴: /api/*
+    - 상태 검사:
+        - 프로토콜: HTTP
+        - 경로: /api/health
+        - 포트: traffic-port
+        - 정상 임계값: 5
+        - 비정상 임계값: 2
+        - 제한 시간: 5초
+        - 간격: 30초
+        - 성공 코드: 200
+    
+    ```bash
+    # 웹 서버 구성 예시 (경로별 라우팅 테스트용)
+    location /web {
+      return 200 "Web Server Response";
+    }
+    
+    location /api {
+      return 200 "API Server Response";
+    }
+    ```
+    
+
+### 3. Network Load Balancer (NLB)
+
+-  **역할**: L4 전용 초고속 분산 (TCP·UDP)
+-  **특징**
+    - 초당 수백만 건, 수 밀리초 이하 지연
+    - 고정 IP(Elastic IP) 할당 가능
+    - TLS 종료는 지원하지만 L7 기능(경로·호스트)은 불가
+-  **사용 예시**
+    - 게임 서버, 실시간 스트리밍, VoIP 등 초저지연이 필수인 서비스
+    - 외부 시스템과 고정 IP로 통신해야 하는 환경
+-  **장점 / 단점**
+    -  지연·처리량 최적화, 대규모 TCP 연결 처리
+    -  HTTP·HTTPS 고급 라우팅 기능은 불가
+- **설정 방법**
+    
+    1단계: 기본 구성
+    
+    - 이름: my-network-lb
+    - 체계: 인터넷 경계
+    - IP 주소 유형: IPv4
+    
+    2단계: 네트워크 구성
+    
+    - VPC: ap-northeast-2 기본 VPC
+    매핑:
+    - ap-northeast-2a: 퍼블릭 서브넷 선택, EIP 할당
+    - ap-northeast-2c: 퍼블릭 서브넷 선택, EIP 할당
+    - 교차 영역 로드 밸런싱 활성화
+    
+    3단계: 보안 설정
+    
+    - TLS 리스너의 경우:
+        - 인증서: ACM 인증서 선택
+        - 보안 정책: ELBSecurityPolicy-TLS-1-2-2017-01
+    
+    4단계: 리스너 구성
+    
+    - TCP/TLS:443 리스너 추가
+    - 기본 작업: game-server-group으로 전달
+    
+    5단계: 대상 그룹 설정
+    
+    - 이름: game-server-group
+    - 프로토콜: TCP
+    - 포트: 443
+    - 대상 유형: 인스턴스
+    - 등록된 대상에 대한 IP 주소 유형: IPv4
+    - 상태 검사:
+        - 프로토콜: TCP
+        - 포트: traffic-port
+        - 정상 임계값: 5
+        - 비정상 임계값: 3
+        - 간격: 10초
+        - 제한 시간: 6초
+    
+    6단계: 대상 등록
+    
+    - 인스턴스 선택
+    - 포트 재정의: 443
+    - 등록 보류 중인 대상 포함
+
+
+### Cloud **Load Balancer 비교**
+
+| 항목 | ELB  | ALB | NLB |
+| --- | --- | --- | --- |
+| 계층 | L4/L7 | L7 | L4 |
+| 프로토콜 | HTTP/HTTPS, TCP, SSL | HTTP/HTTPS, WebSocket, HTTP/2 | TCP, UDP, TLS |
+| 라우팅 | 단순 라운드로빈 | 경로·호스트·헤더 분기 | IP·포트 기반 |
+| 고급 기능 | 거의 없음 | 인증·rewrite·WAF 연동 | 고정 IP, 대규모 동시 연결 |
+| 과금 모델 | 처리량 기반 | 처리량+요청 수 기반 | 처리량 기반 |
+| 추천 용도 | 레거시/간단 웹 | 마이크로서비스/API | 실시간·저지연 |
+
+## **Software Load Balancer**
+
+### 1. HAProxy
+
+-  **레벨**: L4(TCP) & L7(HTTP)
+-  **특징**
+    - 다양한 분산 알고리즘(Round Robin, LeastConn, Source)
+    - ACL(Access Control List), SSL Termination·Passthrough
+    - 내장 통계 대시보드 (`:8080` 포트)
+-  **예시 설정**
+    
+    ```
+    frontend http_front
+        bind *:80
+        mode http
+        default_backend web_back
+    
+    backend web_back
+        mode http
+        balance leastconn
+        server web1 10.0.0.1:80 check
+        server web2 10.0.0.2:80 check
+    ```
+    
+-  **장점 / 단점**
+    -  경량·고성능, 설정 유연
+    -  설정 문법이 다소 복잡할 수 있음
+
+
+### 2. NGINX
+
+-  **레벨**: L7(HTTP) 기본, L4(TCP/UDP) 지원 가능
+-  **특징**
+    - HTTP reverse proxy·정적 파일 서비스 강점
+    - 설정 간결(`nginx.conf`), 다수 커뮤니티 모듈
+-  **예시 설정**
+    
+    ```
+    upstream web {
+        server web1.example.com;
+        server web2.example.com;
+    }
+    server {
+        listen 80;
+        location / {
+            proxy_pass http://web;
+        }
+    }
+    ```
+    
+-  **장점 / 단점**
+    -  설정 직관적·문서 풍부, 정적 콘텐츠 처리 우수
+    -  순수 OSS 버전은 일부 고급 기능(health check, sticky) 제약
+
+
+### **Software Load Balancer 비교**
+
+| 항목 | HAProxy | NGINX |
+| --- | --- | --- |
+| 계층 | L4/L7 | L7 기본, L4 옵션 |
+| 분산 알고리즘 | 다양(LeastConn 등) | Round Robin, IP Hash |
+| 헬스체크 | 지원 | 제한적(모듈 필요) |
+| SSL 처리 | Termination/Passthrough | Termination |
+| 모니터링 | 내장 대시보드 | 외부 툴 연동 |
+
+
+**실습 전 환경 설정**
+
+1. **운영체제**: Rocky/CentOS 8+, Ubuntu 24.04+
+2. **패키지 설치**
+    
+    ```bash
+    # HAProxy
+    sudo yum install -y haproxy     # Rocky/CentOS
+    sudo apt install -y haproxy     # Ubuntu/Debian
+    
+    # NGINX
+    sudo yum install -y nginx       # Rocky/CentOS
+    sudo apt install -y nginx       # Ubuntu/Debian
+    ```
+    
+3. **방화벽**: 80, 443, 8080 포트 허용
+
+### Cloud Load Balancer와 Software Load Balancer의 주요 차이점
+
+1. **구축/관리 방식**
+
+- Cloud LB: AWS가 관리하는 완전 관리형 서비스로, 설정이 간단하고 유지 보수가 쉬움
+- Nginx/HAProxy: 직접 서버에 설치하고 관리해야 하며, 설정과 유지 보수에 전문성이 필요함
+
+2. **확장성/가용성**
+
+- Cloud LB: AWS가 자동으로 확장과 고가용성을 보장
+- Nginx/HAProxy: 직접 확장성과 고가용성 구성을 해야 함
+
+3. **특징과 용도**
+
+- Cloud LB:
+    - ELB: 기본적인 로드밸런싱
+    - ALB: 경로 기반 라우팅, 마이크로서비스에 적합
+    - NLB: 초고속 TCP 트래픽 처리
+- Nginx: HTTP reverse proxy, 정적 파일 서비스에 강점
+- HAProxy: 다양한 로드밸런싱 알고리즘, 상세한 트래픽 제어 가능
+
+4. **비용**
+
+- Cloud LB: 트래픽 사용량에 따른 과금
+- Nginx/HAProxy: 서버 비용만 발생
+</details>
 
  ### 김동욱
 
