@@ -2411,7 +2411,8 @@ Dashboard나 Metrics Server는 **Pod 간 HTTP 통신이 기본 전제**이기 �
 </details>
 
 ### 김성휘
-<details> ### 예약 인스턴스
+<details> 
+<summary> 예약 인스턴스</summary>
 
 > 개념
 > > 1. EC2 인스턴스를 일정 기간 예약해서 할인을 받는 요금 모델
