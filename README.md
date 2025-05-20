@@ -1244,6 +1244,98 @@ A. `0.0.0.0` 출발지, `255.255.255.255` 목적지 브로드캐스트를 이용
     * **응답 트래픽:** 스테이트풀 방화벽인 보안 그룹의 특성 덕분에, 인스턴스가 외부로 보낸 요청에 대한 응답 트래픽은 별도의 인바운드 규칙 없이 자동으로 허용됩니다. 이는 보안 그룹이 연결 상태를 기억하기 때문입니다.
 </details>
 
+<details>
+	<summary> ALB vs NLB 요약 정리 </summary>
+
+<h1>✅ ALB vs NLB 요약 정리</h1>
+
+<h2>🌐 ALB (Application Load Balancer)</h2>
+<ul>
+  <li><strong>계층:</strong> L7 (Application Layer)</li>
+  <li><strong>프로토콜:</strong> HTTP, HTTPS, gRPC</li>
+  <li><strong>기능:</strong>
+    <ul>
+      <li>경로/호스트/헤더 기반 라우팅</li>
+      <li>SSL/TLS 종료</li>
+      <li>WebSocket, HTTP/2 지원</li>
+      <li>Sticky Session (고정 세션)</li>
+      <li>애플리케이션 수준 Health Check</li>
+    </ul>
+  </li>
+  <li><strong>사용 예:</strong> 마이크로서비스, 경로별 API 서버, WebSocket 기반 실시간 앱</li>
+</ul>
+
+<h2>🌐 NLB (Network Load Balancer)</h2>
+<ul>
+  <li><strong>계층:</strong> L4 (Transport Layer)</li>
+  <li><strong>프로토콜:</strong> TCP, UDP, TLS</li>
+  <li><strong>기능:</strong>
+    <ul>
+      <li>고정 IP 제공 (Elastic IP)</li>
+      <li>소스 IP 보존</li>
+      <li>TLS 종료 또는 패스스루</li>
+      <li>초고속, 초저지연 성능</li>
+      <li>네트워크 수준 Health Check</li>
+    </ul>
+  </li>
+  <li><strong>사용 예:</strong> 게임 서버, IoT, 실시간 트래픽 처리 시스템</li>
+</ul>
+
+<h2>🔍 주요 차이점 비교표</h2>
+<table border="1">
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>ALB</th>
+      <th>NLB</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>계층</td><td>L7 (Application)</td><td>L4 (Transport)</td></tr>
+    <tr><td>프로토콜</td><td>HTTP, HTTPS, gRPC</td><td>TCP, UDP, TLS</td></tr>
+    <tr><td>라우팅 기준</td><td>URL, Host, 헤더, 쿼리</td><td>IP, 포트</td></tr>
+    <tr><td>고정 IP</td><td>불가</td><td>가능 (Elastic IP)</td></tr>
+    <tr><td>소스 IP 보존</td><td>불완전 (X-Forwarded-For)</td><td>완전 지원</td></tr>
+    <tr><td>TLS 종료</td><td>지원</td><td>선택 사항</td></tr>
+    <tr><td>세션 유지</td><td>가능 (Sticky Session)</td><td>불가</td></tr>
+    <tr><td>성능</td><td>낮음 (기능 많음)</td><td>매우 높음 (수백만 RPS)</td></tr>
+    <tr><td>사용 목적</td><td>정밀 HTTP 라우팅</td><td>초고속 네트워크 트래픽</td></tr>
+  </tbody>
+</table>
+
+<h2>💡 선택 가이드</h2>
+<table border="1">
+  <thead>
+    <tr><th>상황</th><th>추천 로드밸런서</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>경로/도메인 기반 라우팅 필요</td><td>✅ ALB</td></tr>
+    <tr><td>WebSocket, HTTP/2 필요</td><td>✅ ALB</td></tr>
+    <tr><td>SSL 인증서 중앙 관리</td><td>✅ ALB</td></tr>
+    <tr><td>고정 IP 주소 필요</td><td>✅ NLB</td></tr>
+    <tr><td>낮은 지연, 높은 성능 필요</td><td>✅ NLB</td></tr>
+    <tr><td>게임 서버, TCP 서비스 운영</td><td>✅ NLB</td></tr>
+  </tbody>
+</table>
+
+<h2>📌 실사용 시나리오 비교</h2>
+<table border="1">
+  <thead>
+    <tr><th>항목</th><th>ALB</th><th>NLB</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>/api, /user URL 구분</td><td>O</td><td>X</td></tr>
+    <tr><td>TCP 포트 3306 접속 전달</td><td>X</td><td>O</td></tr>
+    <tr><td>HTTPS 요청 처리</td><td>O</td><td>O (선택)</td></tr>
+    <tr><td>고정 IP를 통한 접근</td><td>X</td><td>O</td></tr>
+    <tr><td>마이크로서비스 API 라우팅</td><td>O</td><td>X</td></tr>
+    <tr><td>대규모 TCP 기반 채팅 서버</td><td>X</td><td>O</td></tr>
+  </tbody>
+</table>
+
+ 
+</details>
+
 
 
 ### 임용진
