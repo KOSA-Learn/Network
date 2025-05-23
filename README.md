@@ -2770,6 +2770,46 @@ AWS 사용자 지정 라우팅 테이블은 기본 라우팅 테이블 외에 �
 
 </details>
 
+<details>
+	<summary> AWS Security Group vs AWS WAF(Web Application Firewall)</summary>
+
+ # AWS 보안그룹 vs AWS WAF
+
+## 1. 보안그룹 (Security Group)
+- EC2, RDS 등 리소스에 붙는 가상 방화벽
+- 인바운드/아웃바운드 트래픽을 포트/IP/프로토콜 기준으로 제어
+- 상태 저장 방식
+
+## 2. AWS WAF (Web Application Firewall)
+- CloudFront, ALB, API Gateway 앞단에 배치되는 웹 방화벽
+- SQLi, XSS 등 애플리케이션 계층 공격 방지
+- IP 차단, Rate 제한, 패턴 필터링
+- 상태 비저장 방식
+
+## 3. 실사용 예시
+### 보안그룹
+- SSH는 사무실 IP만 허용
+- 웹은 80/443 전체 허용
+- DB는 내부 웹 서버 SG만 허용
+### WAF
+- `/login` 경로에 Rate 제한
+- SQL Injection 탐지 및 차단
+- 중국 IP 차단
+
+## 4. 비교 요약
+| 항목         | 보안그룹 (SG)                           | AWS WAF                                         |
+|--------------|-----------------------------------------|-------------------------------------------------|
+| 적용 대상    | EC2, RDS 등                             | CloudFront, ALB, API Gateway                    |
+| 제어 대상    | TCP/UDP 포트, IP 주소, 프로토콜 등 네트워크 수준 | HTTP/HTTPS 요청, URL, 헤더, 쿼리 문자열 등 애플리케이션 요청 |
+| 계층         | 네트워크 계층 (L3~L4)                   | 애플리케이션 계층 (L7)                          |
+| 상태         | 상태 저장 (Stateful)                    | 상태 비저장 (Stateless)                         |
+| 주요 기능    | 포트/IP/프로토콜 제어                  | 패턴 기반 HTTP 필터링, Rate 제한, IP 차단       |
+| 사용 위치    | 서브넷 내 리소스                        | 웹 서비스 앞단 (프록시 역할)                    |
+| 역할         | 네트워크 접근 제어 (접속 허용 / 차단)   | 웹 요청 검사 및 필터링 (공격 탐지 / 차단)       |
+| 요약         | 네트워크 레벨 방화벽                   | 애플리케이션 레벨 방화벽                        |
+
+</details>
+
 ### 김성휘
 <details> 
 <summary> 예약 인스턴스</summary>
